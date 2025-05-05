@@ -1,6 +1,7 @@
 const User = require('../models/userModel');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 
 const sortEducation = (education) => {
   const currentEducation = education.filter(edu => edu.to === "Present");
@@ -278,6 +279,194 @@ const getAllUsers = async (req, res) => {
       res.status(500).json({ message: error.message });
     }
   };
+
+  const sendFriendRequest = async (req, res) => {
+    const { senderId, receiverId } = req.body;
+  
+    if (!senderId || !receiverId) {
+      return res.status(400).json({ message: 'Sender and receiver IDs are required.' });
+    }
+  
+    if (senderId === receiverId) {
+      return res.status(400).json({ message: 'You cannot send a request to yourself.' });
+    }
+  
+    try {
+      const sender = await User.findById(senderId);
+      const receiver = await User.findById(receiverId);
+  
+      if (!sender || !receiver) {
+        return res.status(404).json({ message: 'User not found.' });
+      }
+  
+      // Check if request already exists
+      const existingRequest = receiver.friends.find(
+        (f) => f.userId.toString() === senderId
+      );
+  
+      if (existingRequest) {
+        return res.status(409).json({ message: 'Friend request already sent or exists.' });
+      }
+  
+      // Add request to receiver's friends list
+      receiver.friends.push({
+        userId: senderId,
+        status: 'pending',
+        dateAdded: new Date()
+      });
+  
+      await receiver.save();
+  
+      return res.status(200).json({ message: 'Friend request sent successfully.' });
+  
+    } catch (error) {
+      return res.status(500).json({ message: error.message });
+    }
+  };
+
+  const pendingfriendlist = async (req, res) => {
+    try {
+      const userId = req.params.id;
+  
+      // Find user and populate friends
+      const user = await User.findById(userId)
+        .populate('friends.userId', 'firstName lastName email profilePic education workExperience connections') // only select these fields
+        .exec();
+  
+      if (!user) {
+        return res.status(404).json({ message: 'User not found.' });
+      }
+  
+      // Optional: filter only accepted friends
+      const acceptedFriends = user.friends.filter(friend => friend.status === 'pending');
+  
+      res.status(200).json({ friends: acceptedFriends });
+  
+    } catch (error) {
+      console.error('Error fetching friends:', error);
+      res.status(500).json({ message: 'Internal server error.' });
+    }
+  };
+
+  const getUnconnectedUsers = async (req, res) => {
+    try {
+      const userId = req.params.id;
+  
+      // Step 1: Find the user and get the friends + connection list
+      const user = await User.findById(userId).exec();
+  
+      if (!user) {
+        return res.status(404).json({ message: 'User not found.' });
+      }
+  
+      // Extract the friend and connection userIds
+      const friendIds = user.friends.map(friend => friend.userId.toString());
+      const connectionIds = user.connectionList.map(conn => conn.userId.toString());
+  
+      // Combine and remove duplicates
+      const excludeIds = new Set([...friendIds, ...connectionIds, userId]);
+  
+      // Step 2: Find all users excluding friends, connections, and self
+      const users = await User.find({ _id: { $nin: Array.from(excludeIds) } })
+        .select('firstName lastName profilePic connections education workExperience');
+  
+      res.status(200).json(users);
+    } catch (err) {
+      console.error('Error fetching users excluding friends and connections:', err);
+      res.status(500).json({ message: 'Internal server error.' });
+    }
+  };  
+
+  const acceptFriendRequest = async (req, res) => {
+    const { receiverId, senderId } = req.body;
+  
+    if (!receiverId || !senderId) {
+      return res.status(400).json({ message: 'Receiver and sender IDs are required.' });
+    }
+  
+    try {
+      const receiver = await User.findById(receiverId);
+      const sender = await User.findById(senderId);
+  
+      if (!receiver || !sender) {
+        return res.status(404).json({ message: 'User not found.' });
+      }
+  
+      // Find the friend request
+      const requestIndex = receiver.friends.findIndex(
+        (f) => f.userId.toString() === senderId && f.status === 'pending'
+      );
+  
+      if (requestIndex === -1) {
+        return res.status(404).json({ message: 'No pending friend request found.' });
+      }
+  
+      // Remove from friends list
+      receiver.friends.splice(requestIndex, 1);
+  
+      // Add to connection list
+      receiver.connectionList.push({
+        userId: senderId,
+        dateAdded: new Date(),
+        isFavorite: false,
+        lastInteraction: new Date()
+      });
+  
+      // Increment connection count
+      receiver.connections += 1;
+  
+      // Also update sender's connection list (mutual connection)
+      sender.connectionList.push({
+        userId: receiverId,
+        dateAdded: new Date(),
+        isFavorite: false,
+        lastInteraction: new Date()
+      });
+      sender.connections += 1;
+  
+      await receiver.save();
+      await sender.save();
+  
+      return res.status(200).json({ message: 'Friend request accepted.' });
+    } catch (error) {
+      return res.status(500).json({ message: error.message });
+    }
+  };
+  
+  const declineFriendRequest = async (req, res) => {
+    const { receiverId, senderId } = req.body;
+  
+    if (!receiverId || !senderId) {
+      return res.status(400).json({ message: 'Receiver and sender IDs are required.' });
+    }
+  
+    try {
+      const receiver = await User.findById(receiverId);
+  
+      if (!receiver) {
+        return res.status(404).json({ message: 'Receiver not found.' });
+      }
+  
+      const friendRequest = receiver.friends.find(
+        (f) => f.userId.toString() === senderId && f.status === 'pending'
+      );
+  
+      if (!friendRequest) {
+        return res.status(404).json({ message: 'No pending friend request found.' });
+      }
+  
+      friendRequest.status = 'rejected';
+  
+      await receiver.save();
+  
+      return res.status(200).json({ message: 'Friend request declined.' });
+    } catch (error) {
+      return res.status(500).json({ message: error.message });
+    }
+  };
+  
+  
+  
   
   
   
@@ -292,7 +481,12 @@ const getAllUsers = async (req, res) => {
     getBio,
     addEducation,
     addWorkExperience,
+    getUnconnectedUsers,
     getAddress,
     uploadProfilePic,
-    updateAddress
+    updateAddress,
+    sendFriendRequest,
+    pendingfriendlist,
+    acceptFriendRequest,
+    declineFriendRequest
   };

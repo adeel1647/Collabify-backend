@@ -12,7 +12,24 @@ const userSchema = new mongoose.Schema({
   gender: { type: String, enum: ['Male', 'Female', 'Other'] },
   coverPic: String,
   bio: String,
-  connections: { type: Number, default: 0 },
+
+  connections: { type: Number, default: 0 }, // total accepted connections
+
+  friends: [
+    {
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      dateAdded: { type: Date, default: Date.now },
+      status: { type: String, enum: ['pending', 'accepted', 'rejected'], default: 'pending' },
+    }
+  ],
+  connectionList: [ // New connection list like friends
+    {
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      dateAdded: { type: Date, default: Date.now },
+      isFavorite: { type: Boolean, default: false },
+      lastInteraction: Date
+    }
+  ],
 
   education: [
     {
@@ -36,8 +53,6 @@ const userSchema = new mongoose.Schema({
       date: { type: Date, default: Date.now }
     }
   ],
-
-  // 👇 Add this new field for pages
   pages: [
     {
       pageId: { type: mongoose.Schema.Types.ObjectId, ref: 'Page' },
@@ -46,7 +61,6 @@ const userSchema = new mongoose.Schema({
       profileImage: String
     }
   ]
-
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

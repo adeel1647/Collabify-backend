@@ -13,8 +13,13 @@ const {
   addWorkExperience,
   addEducation ,
   updateAddress,
+  getUnconnectedUsers,
   uploadProfilePic,
-  getAddress
+  getAddress,
+  pendingfriendlist,
+  sendFriendRequest,
+  acceptFriendRequest,
+  declineFriendRequest,
 } = require('../controllers/userController');
 
 // Register with image
@@ -30,8 +35,10 @@ router.put('/:id/education', addEducation);
 router.put('/:id/workExperience', addWorkExperience);
 router.put('/:id/update-address', updateAddress);
 router.get('/:id/get-address', getAddress);
-
-
-
+router.post('/connection', sendFriendRequest);
+router.get('/unconnected-users/:id', getUnconnectedUsers);
+router.get('/:id/friends', pendingfriendlist);
+router.post('/accept', acceptFriendRequest);
+router.post('/decline', declineFriendRequest);
 
 module.exports = router;
