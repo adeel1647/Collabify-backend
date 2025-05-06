@@ -18,6 +18,13 @@ const pageSchema = new mongoose.Schema({
       joinedAt: { type: Date, default: Date.now }
     }
   ],
+  invitation: [
+      {
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        dateAdded: { type: Date, default: Date.now },
+        status: { type: String, enum: ['pending', 'accepted', 'rejected'], default: 'pending' },
+      }
+    ],
   posts: [
       {
         postId: { type: mongoose.Schema.Types.ObjectId, ref: 'Post' },

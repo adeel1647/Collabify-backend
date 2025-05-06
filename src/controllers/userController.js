@@ -351,31 +351,43 @@ const getAllUsers = async (req, res) => {
   const getUnconnectedUsers = async (req, res) => {
     try {
       const userId = req.params.id;
-  
-      // Step 1: Find the user and get the friends + connection list
       const user = await User.findById(userId).exec();
   
       if (!user) {
         return res.status(404).json({ message: 'User not found.' });
       }
   
-      // Extract the friend and connection userIds
       const friendIds = user.friends.map(friend => friend.userId.toString());
       const connectionIds = user.connectionList.map(conn => conn.userId.toString());
-  
-      // Combine and remove duplicates
       const excludeIds = new Set([...friendIds, ...connectionIds, userId]);
   
-      // Step 2: Find all users excluding friends, connections, and self
-      const users = await User.find({ _id: { $nin: Array.from(excludeIds) } })
-        .select('firstName lastName profilePic connections education workExperience');
+      // Extract user's bio, institution and address (if available)
+      const userBio = user.bio?.toLowerCase() || '';
+      const userAddress = user.address?.toLowerCase() || '';
+      const userInstitutions = user.education?.map(ed => ed.institution?.toLowerCase()) || [];
   
-      res.status(200).json(users);
+      // Build filters to match similar users and exclude incomplete profiles
+      const smartSuggestions = await User.find({
+        _id: { $nin: Array.from(excludeIds) },
+        bio: { $exists: true, $ne: '' },
+        education: { $exists: true, $not: { $size: 0 } },
+        workExperience: { $exists: true, $not: { $size: 0 } },
+        $or: [
+          { bio: { $regex: userBio.split(' ')[0] || '', $options: 'i' } },
+          { address: { $regex: userAddress.split(' ')[0] || '', $options: 'i' } },
+          { 'education.institution': { $in: userInstitutions } }
+        ]
+      })
+        .select('firstName lastName profilePic connections education workExperience')
+        .limit(15);
+  
+      res.status(200).json(smartSuggestions);
     } catch (err) {
-      console.error('Error fetching users excluding friends and connections:', err);
+      console.error('Error fetching smart suggestions:', err);
       res.status(500).json({ message: 'Internal server error.' });
     }
-  };  
+  };
+  
 
   const acceptFriendRequest = async (req, res) => {
     const { receiverId, senderId } = req.body;
@@ -464,6 +476,37 @@ const getAllUsers = async (req, res) => {
       return res.status(500).json({ message: error.message });
     }
   };
+
+  const connectionlist = async (req, res) => {
+    const { userId } = req.params;
+  
+    try {
+      const user = await User.findById(userId)
+        .populate({
+          path: 'connectionList.userId',
+          select: 'firstName lastName profilePic'
+        });
+  
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+  
+      // Extract populated connectionList
+      const connections = user.connectionList.map(conn => ({
+        userId: conn.userId._id,
+        fullName: `${conn.userId.firstName} ${conn.userId.lastName}`,
+        profilePic: conn.userId.profilePic,
+        dateAdded: conn.dateAdded,
+        isFavorite: conn.isFavorite,
+        lastInteraction: conn.lastInteraction
+      }));
+  
+      res.status(200).json({ success: true, connections });
+    } catch (error) {
+      console.error('Error fetching connections:', error);
+      res.status(500).json({ success: false, message: 'Server error' });
+    }
+  };
   
   
   
@@ -488,5 +531,6 @@ const getAllUsers = async (req, res) => {
     sendFriendRequest,
     pendingfriendlist,
     acceptFriendRequest,
+    connectionlist,
     declineFriendRequest
   };

@@ -20,6 +20,7 @@ const {
   sendFriendRequest,
   acceptFriendRequest,
   declineFriendRequest,
+  connectionlist,
 } = require('../controllers/userController');
 
 // Register with image
@@ -40,5 +41,6 @@ router.get('/unconnected-users/:id', getUnconnectedUsers);
 router.get('/:id/friends', pendingfriendlist);
 router.post('/accept', acceptFriendRequest);
 router.post('/decline', declineFriendRequest);
+router.get('/:userId/connections',connectionlist );
 
 module.exports = router;
