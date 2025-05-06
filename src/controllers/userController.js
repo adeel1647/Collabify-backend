@@ -324,6 +324,7 @@ const getAllUsers = async (req, res) => {
     }
   };
 
+
   const pendingfriendlist = async (req, res) => {
     try {
       const userId = req.params.id;
